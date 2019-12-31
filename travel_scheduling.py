@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
+from tsp import GUI
 
+GUI()
+print("Running...")
 df_city_site = pd.read_csv("site_city.csv", encoding="big5")
 site_city_dict = {}
 city_site_dict = {}
@@ -42,11 +45,26 @@ site_list = list(df_site_distance.keys())
 import random
 from pulp import *
 
-satisfaction = list(np.zeros(len(df_site_distance.keys())))
-# create 隨機滿意度變數 list
-for i in range(len(satisfaction)):
-    satisfaction[i] = round(random.uniform(0, 10), 1)  # 取小數兩位
+import random
+import json
 
+# 讀檔
+satisfaction = []
+with open("data.txt") as data_file:
+    json_data = json.load(data_file)
+    for place in site_list:
+        if(place in json_data):
+            satisfaction.append(int(json_data[place]))
+        else:
+            print("place " + place + " not in json file.")
+buget = float(json_data["預算"]) / 2.6
+# print(len(satisfaction))
+# satisfaction = list(np.zeros(len(df_site_distance.keys())))
+# # create 隨機滿意度變數 list
+# for i in range(len(satisfaction)):
+#     satisfaction[i] = round(random.uniform(0, 10), 1)  # 取小數兩位
+    
+# print(satisfaction)
 # create 2-D variables list
 length = len(df_site_distance.keys())
 
@@ -76,6 +94,7 @@ print("finish")
 
 # objective(滿意度最大化)
 tmp_obj = 0
+# print(length)
 for i in range(length):
         tmp_obj += lpSum([satisfaction[j] * variable_list[i][j] for j in range(length)])
 prob += tmp_obj
@@ -129,7 +148,24 @@ for i in range(length):
             continue
         distance += df_site_distance.iloc[i, j] * variable_list[i][j]
     
-prob += (distance <= float(1000))
+prob += (distance <= float(buget))
+
+import itertools
+# 縣市裡面內部景點自己繞圈圈(目前設定到 6 個)
+for city in city_site_dict:
+    site_list_in_city = city_site_dict[city]
+    for numbers in range(2, 6):
+        if(len(site_list_in_city) < numbers):
+            continue
+        permutation_list = list(itertools.permutations(site_list_in_city, numbers))
+        for num in range(len(permutation_list)):
+            tmp_addition = 0
+            for index in range(numbers):
+                site_1 = site_list.index(permutation_list[num][index])
+                site_2 = site_list.index(permutation_list[num][(index+1)%numbers])
+                tmp_addition += variable_list[site_1][site_2]
+            prob += (tmp_addition <= numbers - 1)  # 避免景點之間互相抵達
+# print("finish")
 
 prob.solve()
 
@@ -165,7 +201,7 @@ for v in prob.variables():
         final_site_list.append(str(v.name).split("_")[0])
         
 # 把景點順序印出來
-first =  "嘉義火車站"  # 有在路線當中隨便一個景點丟進來
+first =  final_site_list[0]  # 有在路線當中隨便一個景點丟進來
 this_site = first
 next_site = final_dict[first][1]
 final_site_list.remove(first)
@@ -174,15 +210,15 @@ this_site = next_site
 next_site = final_dict[this_site][1]
 counting = 0
 
-while(this_site != first and counting <= 50):
+while(this_site != first):
     print(this_site + " -> " + next_site)
     final_site_list.remove(this_site)
     this_site = next_site
     next_site = final_dict[this_site][1]
     counting += 1
     
-print("count:", counting)
-print(final_site_list)  # 剩下有問題沒接起來的景點(自己有小 loop 的)
+# print("count:", counting)
+# print(final_site_list)  # 剩下有問題沒接起來的景點(自己有小 loop 的)
 
 '''
 比如範例裡面臺南的 '赤崁樓', '林百貨', '國華街' 三個自己在小圈圈
@@ -190,6 +226,6 @@ print(final_site_list)  # 剩下有問題沒接起來的景點(自己有小 loop
 print('obj=',round(value(prob.objective), 2))  # 滿意度
 print("total sites:", total)                   # 經過總景點數
 print("distance:", distance_total)             # 總里程
-print(bool_list)
+# print(bool_list)
 final_site_list = set(final_site_list)
-print(final_site_list, len(final_site_list))
+# print(final_site_list, len(final_site_list))
